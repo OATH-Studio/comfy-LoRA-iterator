@@ -12,7 +12,8 @@ https://www.theoath.studio/projects/comfy-lora-iterator
 ## Install
 
 ```bash
-cp -r lora_directory_iterator/ ComfyUI/custom_nodes/
+cp ComfyUI/custom_nodes/
+git clone git@github.com:OATH-Studio/comfy-LoRA-iterator.git
 # restart ComfyUI
 ```
 
