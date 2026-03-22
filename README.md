@@ -4,6 +4,9 @@ A ComfyUI node that automatically steps through every LoRA in a directory
 (or subdirectory) on each generation run, so you can test all your LoRAs
 without touching the graph between runs.
 
+https://www.theoath.studio/projects/comfy-lora-iterator
+
+![Example Node](example-node.png)
 ---
 
 ## Install
