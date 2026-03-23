@@ -1,4 +1,4 @@
-import { app } from "../../scripts/app.js";
+import { ComfyApp, app } from "../../scripts/app.js";
 
 app.registerExtension({
     name: "LoRAIterator.DynamicDirectory",
@@ -6,20 +6,19 @@ app.registerExtension({
     nodeCreated(node, app) {
         if (node.comfyClass !== "LoRADirectoryIterator") return;
 
-        const loraWidget = node.widgets[node.widgets.findIndex(w => w.name === "lora_name")];
-        const dirWidget  = node.widgets[node.widgets.findIndex(w => w.name === "directory")];
+        const lora_names_widget = node.widgets[node.widgets.findIndex(obj => obj.name === 'lora_name')];
+        var full_lora_list = lora_names_widget.options.values;
+        const directory_widget = node.widgets[node.widgets.findIndex(obj => obj.name === 'directory')];
 
-        var fullLoraList = loraWidget.options.values;
-
-        Object.defineProperty(loraWidget.options, "values", {
+        Object.defineProperty(lora_names_widget.options, "values", {
             set: (x) => {
-                fullLoraList = x;
+                full_lora_list = x;
             },
             get: () => {
-                if (dirWidget.value === "[All]")
-                    return fullLoraList;
+                if (directory_widget.value === '[All]')
+                    return full_lora_list;
 
-                return fullLoraList.filter(x => x.startsWith(dirWidget.value));
+                return full_lora_list.filter(x => x.includes('/' + directory_widget.value + '/') || x.includes('\\' + directory_widget.value + '\\'));
             }
         });
     }
