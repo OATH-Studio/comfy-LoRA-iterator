@@ -92,8 +92,8 @@ class LoRADirectoryIterator:
 
     @classmethod
     def INPUT_TYPES(cls):
-        directories   = _scan_directories()
-        default_dir   = directories[1] if len(directories) > 1 else "[All]"
+        directories = _scan_directories()
+        default_dir = directories[1] if len(directories) > 1 else "[All]"
         default_loras = _scan_loras(default_dir)
         default_lora  = default_loras[0] if default_loras else ""
 
@@ -102,11 +102,18 @@ class LoRADirectoryIterator:
                 "model": ("MODEL",),
                 "clip":  ("CLIP",),
 
-                "directory": (directories, {"default": default_dir}),
-                "lora_name": (
-                    default_loras if default_loras else ["(no loras found)"],
-                    {"default": default_lora},
-                ),
+                "directory": (directories, {
+                    "default": default_dir,
+                }),
+                # lora_name is now a plain STRING so the user can type a name,
+                # AND we populate it correctly at runtime from the chosen directory.
+                # The actual dropdown update happens via the /update_node_status
+                # endpoint — see the JavaScript companion file (lora_iterator.js).
+                "lora_name": ("STRING", {
+                    "default": default_lora,
+                    "multiline": False,
+                    "dynamicPrompts": False,
+                }),
 
                 "strength_model": ("FLOAT", {
                     "default": 1.0, "min": -10.0, "max": 10.0,
@@ -134,16 +141,22 @@ class LoRADirectoryIterator:
         "fixed / increment / decrement / randomize."
     )
 
+    # ── API endpoint: called by the JS widget to fetch LoRAs for a directory ──
+
+    @classmethod
+    def get_loras_for_directory(cls, directory: str) -> list[str]:
+        """Helper exposed to the REST endpoint added below."""
+        return _scan_loras(directory)
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     @classmethod
     def IS_CHANGED(cls, directory, lora_name, strength_model, strength_clip,
                    control_after_generate, unique_id="default"):
-        # fixed mode: return stable hash so ComfyUI can still cache the model
         if control_after_generate == "fixed":
             return f"{directory}:{lora_name}:{strength_model}:{strength_clip}"
-        # all other modes: return random float so node always re-executes
         import random
         return random.random()
-
 
     def load_lora(
         self,
@@ -163,8 +176,14 @@ class LoRADirectoryIterator:
             return (model, clip, "", 0, 0)
 
         total = len(lora_list)
-        idx   = _resolve_index(unique_id, lora_list, lora_name, control_after_generate)
-        name  = lora_list[idx]
+
+        # If the saved lora_name exists in this directory's list, seed state
+        # from it so the iterator starts at the right position.
+        if unique_id not in _state and lora_name in lora_list:
+            _state[unique_id] = lora_list.index(lora_name)
+
+        idx  = _resolve_index(unique_id, lora_list, lora_name, control_after_generate)
+        name = lora_list[idx]
 
         print(
             f"[LoRADirectoryIterator] [{idx + 1}/{total}] {name} | "
@@ -184,6 +203,23 @@ class LoRADirectoryIterator:
         )
 
         return (model_patched, clip_patched, name, idx, total)
+
+
+# ── custom REST endpoint (/lora_iterator/loras) ───────────────────────────────
+# ComfyUI exposes a `PromptServer` with an aiohttp app we can attach routes to.
+
+try:
+    from aiohttp import web
+    from server import PromptServer
+
+    @PromptServer.instance.routes.get("/lora_iterator/loras")
+    async def lora_iterator_get_loras(request):
+        directory = request.rel_url.query.get("directory", "[All]")
+        loras = _scan_loras(directory)
+        return web.json_response({"loras": loras})
+
+except Exception as _e:
+    print(f"[LoRADirectoryIterator] Could not register REST endpoint: {_e}")
 
 
 # ── registration ──────────────────────────────────────────────────────────────
