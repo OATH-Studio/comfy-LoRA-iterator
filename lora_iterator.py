@@ -25,7 +25,6 @@ import comfy.utils
 
 CONTROL_MODES = ["fixed", "increment", "decrement", "randomize"]
 
-# Per-instance LoRA index state, keyed by node unique_id
 _state: dict[str, int] = {}
 
 
@@ -56,10 +55,6 @@ def _scan_loras(directory_filter: str) -> list[str]:
 
 
 def _resolve_index(node_id: str, lora_list: list[str], current_lora: str, mode: str) -> int:
-    """
-    Return the index to use THIS run, then update state for the NEXT run.
-    Initialises from the dropdown selection on first call.
-    """
     total = len(lora_list)
 
     if node_id not in _state:
@@ -69,15 +64,12 @@ def _resolve_index(node_id: str, lora_list: list[str], current_lora: str, mode: 
 
     if mode == "fixed":
         return idx
-
     if mode == "increment":
         _state[node_id] = (idx + 1) % total
         return idx
-
     if mode == "decrement":
         _state[node_id] = (idx - 1) % total
         return idx
-
     if mode == "randomize":
         chosen = _random.randint(0, total - 1)
         _state[node_id] = _random.randint(0, total - 1)
@@ -92,29 +84,17 @@ class LoRADirectoryIterator:
 
     @classmethod
     def INPUT_TYPES(cls):
-        directories = _scan_directories()
-        default_dir = directories[1] if len(directories) > 1 else "[All]"
-        default_loras = _scan_loras(default_dir)
-        default_lora  = default_loras[0] if default_loras else ""
+        directories  = _scan_directories()
+        default_dir  = directories[1] if len(directories) > 1 else "[All]"
+        loras        = _scan_loras(default_dir)
+        default_lora = loras[0] if loras else ""
 
         return {
             "required": {
                 "model": ("MODEL",),
                 "clip":  ("CLIP",),
-
-                "directory": (directories, {
-                    "default": default_dir,
-                }),
-                # lora_name is now a plain STRING so the user can type a name,
-                # AND we populate it correctly at runtime from the chosen directory.
-                # The actual dropdown update happens via the /update_node_status
-                # endpoint — see the JavaScript companion file (lora_iterator.js).
-                "lora_name": ("STRING", {
-                    "default": default_lora,
-                    "multiline": False,
-                    "dynamicPrompts": False,
-                }),
-
+                "directory": (directories, {"default": default_dir}),
+                "lora_name": (loras if loras else ["(no loras found)"], {"default": default_lora}),
                 "strength_model": ("FLOAT", {
                     "default": 1.0, "min": -10.0, "max": 10.0,
                     "step": 0.01, "display": "slider",
@@ -123,7 +103,6 @@ class LoRADirectoryIterator:
                     "default": 1.0, "min": -10.0, "max": 10.0,
                     "step": 0.01, "display": "slider",
                 }),
-
                 "control_after_generate": (CONTROL_MODES, {"default": "increment"}),
             },
             "hidden": {
@@ -141,15 +120,6 @@ class LoRADirectoryIterator:
         "fixed / increment / decrement / randomize."
     )
 
-    # ── API endpoint: called by the JS widget to fetch LoRAs for a directory ──
-
-    @classmethod
-    def get_loras_for_directory(cls, directory: str) -> list[str]:
-        """Helper exposed to the REST endpoint added below."""
-        return _scan_loras(directory)
-
-    # ─────────────────────────────────────────────────────────────────────────
-
     @classmethod
     def IS_CHANGED(cls, directory, lora_name, strength_model, strength_clip,
                    control_after_generate, unique_id="default"):
@@ -158,17 +128,8 @@ class LoRADirectoryIterator:
         import random
         return random.random()
 
-    def load_lora(
-        self,
-        model,
-        clip,
-        directory: str,
-        lora_name: str,
-        strength_model: float,
-        strength_clip: float,
-        control_after_generate: str,
-        unique_id: str = "default",
-    ):
+    def load_lora(self, model, clip, directory, lora_name, strength_model,
+                  strength_clip, control_after_generate, unique_id="default"):
         lora_list = _scan_loras(directory)
 
         if not lora_list:
@@ -176,14 +137,8 @@ class LoRADirectoryIterator:
             return (model, clip, "", 0, 0)
 
         total = len(lora_list)
-
-        # If the saved lora_name exists in this directory's list, seed state
-        # from it so the iterator starts at the right position.
-        if unique_id not in _state and lora_name in lora_list:
-            _state[unique_id] = lora_list.index(lora_name)
-
-        idx  = _resolve_index(unique_id, lora_list, lora_name, control_after_generate)
-        name = lora_list[idx]
+        idx   = _resolve_index(unique_id, lora_list, lora_name, control_after_generate)
+        name  = lora_list[idx]
 
         print(
             f"[LoRADirectoryIterator] [{idx + 1}/{total}] {name} | "
@@ -197,7 +152,6 @@ class LoRADirectoryIterator:
             return (model, clip, name, idx, total)
 
         lora_weights = comfy.utils.load_torch_file(lora_path, safe_load=True)
-
         model_patched, clip_patched = comfy.sd.load_lora_for_models(
             model, clip, lora_weights, strength_model, strength_clip,
         )
@@ -205,8 +159,7 @@ class LoRADirectoryIterator:
         return (model_patched, clip_patched, name, idx, total)
 
 
-# ── custom REST endpoint (/lora_iterator/loras) ───────────────────────────────
-# ComfyUI exposes a `PromptServer` with an aiohttp app we can attach routes to.
+# ── REST endpoint ─────────────────────────────────────────────────────────────
 
 try:
     from aiohttp import web
@@ -215,8 +168,7 @@ try:
     @PromptServer.instance.routes.get("/lora_iterator/loras")
     async def lora_iterator_get_loras(request):
         directory = request.rel_url.query.get("directory", "[All]")
-        loras = _scan_loras(directory)
-        return web.json_response({"loras": loras})
+        return web.json_response({"loras": _scan_loras(directory)})
 
 except Exception as _e:
     print(f"[LoRADirectoryIterator] Could not register REST endpoint: {_e}")
