@@ -86,15 +86,15 @@ class LoRADirectoryIterator:
     def INPUT_TYPES(cls):
         directories  = _scan_directories()
         default_dir  = directories[1] if len(directories) > 1 else "[All]"
-        loras        = _scan_loras(default_dir)
-        default_lora = loras[0] if loras else ""
+        all_loras    = _scan_loras("[All]")
+        default_lora = all_loras[0] if all_loras else ""
 
         return {
             "required": {
                 "model": ("MODEL",),
                 "clip":  ("CLIP",),
                 "directory": (directories, {"default": default_dir}),
-                "lora_name": (loras if loras else ["(no loras found)"], {"default": default_lora}),
+                "lora_name": (all_loras if all_loras else ["(no loras found)"], {"default": default_lora}),
                 "strength_model": ("FLOAT", {
                     "default": 1.0, "min": -10.0, "max": 10.0,
                     "step": 0.01, "display": "slider",
