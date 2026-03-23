@@ -18,12 +18,7 @@ app.registerExtension({
                 if (directory_widget.value === '[All]')
                     return full_lora_list;
 
-                const dir = directory_widget.value;
-                const filtered = full_lora_list.filter(x => {
-                    const parts = x.replace(/\\/g, '/').split('/');
-                    return parts.includes(dir);
-                });
-                return filtered.length > 0 ? filtered : full_lora_list;
+                return full_lora_list.filter(x => x.startsWith(directory_widget.value + '/') || x.startsWith(directory_widget.value + '\\'));
             }
         });
     }
