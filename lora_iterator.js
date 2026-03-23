@@ -1,9 +1,3 @@
-/**
- * lora_iterator.js
- * When the user changes the "directory" dropdown, fetch the filtered
- * LoRA list from the server and repopulate the "lora_name" dropdown.
- */
-
 import { app } from "../../scripts/app.js";
 
 app.registerExtension({
@@ -29,13 +23,14 @@ function setupNode(node) {
     dirWidget._loraIteratorWired = true;
 
     dirWidget.callback = async function (newDir) {
-        const res  = await fetch(`/lora_iterator/loras?directory=${encodeURIComponent(newDir)}`);
-        const data = await res.json();
+        const res   = await fetch(`/lora_iterator/loras?directory=${encodeURIComponent(newDir)}`);
+        const data  = await res.json();
         const loras = data.loras?.length ? data.loras : ["(no loras found)"];
 
-        // Repopulate the combo options and reset selection to first item
+        // These are ALL the places ComfyUI stores combo values — update every one
         loraWidget.options.values = loras;
-        loraWidget.value = loras[0];
+        loraWidget.values         = loras;
+        loraWidget.value          = loras[0];
 
         node.setDirtyCanvas(true, true);
     };
