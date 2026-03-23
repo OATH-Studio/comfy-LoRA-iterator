@@ -16,12 +16,10 @@ app.registerExtension({
                 fullLoraList = x;
             },
             get: () => {
-                if (dirWidget.value === "[All]") return fullLoraList;
-                // Compare only the parent folder of each lora path
-                return fullLoraList.filter(x => {
-                    const parts = x.split(/[\\/]/);
-                    return parts.length > 1 && parts[0] === dirWidget.value;
-                });
+                if (dirWidget.value === "[All]")
+                    return fullLoraList;
+
+                return fullLoraList.filter(x => x.startsWith(dirWidget.value));
             }
         });
     }
